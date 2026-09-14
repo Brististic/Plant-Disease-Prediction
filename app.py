@@ -1,4 +1,5 @@
 from pathlib import Path
+import urllib.request
 import cv2
 import numpy as np
 import pandas as pd
@@ -16,24 +17,60 @@ st.markdown("Automated classification, visual explainability, and quantitative l
 # --- Load Model & Indexing ---
 @st.cache_resource
 def load_model_and_classes():
-    split_csv_path = Path(r"C:\Users\HP\Desktop\projects\plantdiseaseprediction\data\dataset_splits.csv")
-    df = pd.read_csv(split_csv_path)
-    classes = sorted(df["class_name"].unique())
+    # Base directory relative to app.py location
+    base_dir = Path(__file__).resolve().parent
+
+    # 1. Resolve CSV split dynamically with a complete 38-class fallback
+    split_csv_path = base_dir / "data" / "dataset_splits.csv"
+    if split_csv_path.exists():
+        df = pd.read_csv(split_csv_path)
+        classes = sorted(df["class_name"].unique())
+    else:
+        classes = [
+            'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
+            'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 'Cherry_(including_sour)___healthy',
+            'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 'Corn_(maize)___Common_rust_',
+            'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 'Grape___Black_rot',
+            'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 'Grape___healthy',
+            'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot', 'Peach___healthy',
+            'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 'Potato___Early_blight',
+            'Potato___Late_blight', 'Potato___healthy', 'Raspberry___healthy', 'Soybean___healthy',
+            'Squash___Powdery_mildew', 'Strawberry___Leaf_scorch', 'Strawberry___healthy',
+            'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___Late_blight',
+            'Tomato___Leaf_Mold', 'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
+            'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
+            'Tomato___healthy'
+        ]
 
     device = torch.device("cpu")
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, len(classes))
-    
+
+    # 2. Check model weights relative to repository structure
     possible_paths = [
-        Path(r"C:\Users\HP\Desktop\projects\plantdiseaseprediction\models\resnet18_baseline_cpu.pth"),
-        Path("models/resnet18_baseline_cpu.pth"),
-        Path("../models/resnet18_baseline_cpu.pth")
+        base_dir / "models" / "resnet18_baseline_cpu.pth",
+        base_dir / "resnet18_baseline_cpu.pth",
+        Path("models/resnet18_baseline_cpu.pth")
     ]
-    
+
     weights_path = next((p for p in possible_paths if p.exists()), None)
     loaded_ok = False
-    
-    if weights_path is not None:
+
+    # Optional: Auto-download weights if deploying remotely where weights were gitignored
+    if weights_path is None:
+        models_dir = base_dir / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        target_path = models_dir / "resnet18_baseline_cpu.pth"
+        
+        # Example release URL if hosted on GitHub Releases:
+        # url = "https://github.com/<YOUR_USER>/<REPO>/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
+        # try:
+        #     urllib.request.urlretrieve(url, target_path)
+        #     weights_path = target_path
+        # except Exception:
+        #     pass
+
+    if weights_path is not None and weights_path.exists():
         model.load_state_dict(torch.load(weights_path, map_location=device))
         loaded_ok = True
 
@@ -41,13 +78,13 @@ def load_model_and_classes():
     return model, classes, device, loaded_ok
 
 
-# Call function once and handle UI outside the cache
+# Call loader and notify outside the cache function
 model, classes, device, is_loaded = load_model_and_classes()
 
 if not is_loaded:
-    st.error("⚠️ Model weights file 'resnet18_baseline_cpu.pth' not found! Please ensure Step 6 in notebook 03 was executed.")
+    st.warning("⚠️ Trained model weights (`resnet18_baseline_cpu.pth`) not found. Model is using untrained weights. Upload your checkpoint to the `models/` folder to run live inferences.")
 
-# Transform
+# Image transforms
 eval_transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.ToTensor(),
@@ -60,14 +97,14 @@ def compute_severity(pil_img):
     img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     img_lab = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2LAB)
 
-    # 1. Isolate total leaf area
+    # 1. Isolate total leaf foliage
     lower_foliage = np.array([15, 30, 30])
     upper_foliage = np.array([95, 255, 255])
     leaf_mask = cv2.inRange(img_hsv, lower_foliage, upper_foliage)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     leaf_mask = cv2.morphologyEx(leaf_mask, cv2.MORPH_CLOSE, kernel)
 
-    # 2. Extract necrotic/diseased lesions via LAB a-channel
+    # 2. Extract necrotic lesions via LAB a-channel
     a_channel = img_lab[:, :, 1]
     _, lesion_mask = cv2.threshold(a_channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     bounded_lesion = cv2.bitwise_and(lesion_mask, lesion_mask, mask=leaf_mask)
@@ -180,6 +217,7 @@ if uploaded_file is not None:
         st.image(cam_overlay, caption="Grad-CAM Saliency Map (Highlighting AI Focus Regions)", use_container_width=True)
 
     with tab2:
+        # Colored pseudo-colormap directly rendered via OpenCV
         colored_lesions = cv2.applyColorMap(lesion_mask, cv2.COLORMAP_HOT)
         colored_lesions = cv2.cvtColor(colored_lesions, cv2.COLOR_BGR2RGB)
         st.image(colored_lesions, caption="Otsu-Extracted Necrotic Spots (Heatmap)", use_container_width=True)
