@@ -17,36 +17,40 @@ st.markdown("Automated classification, visual explainability, and quantitative l
 # --- Load Model & Indexing ---
 @st.cache_resource
 def load_model_and_classes():
-    # Base directory relative to app.py location
     base_dir = Path(__file__).resolve().parent
 
-    # 1. Resolve CSV split dynamically with a complete 38-class fallback
+    # 1. Complete hardcoded 38-class fallback (prevents EmptyDataError on Streamlit Cloud)
+    classes = [
+        'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
+        'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 'Cherry_(including_sour)___healthy',
+        'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 'Corn_(maize)___Common_rust_',
+        'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 'Grape___Black_rot',
+        'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 'Grape___healthy',
+        'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot', 'Peach___healthy',
+        'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 'Potato___Early_blight',
+        'Potato___Late_blight', 'Potato___healthy', 'Raspberry___healthy', 'Soybean___healthy',
+        'Squash___Powdery_mildew', 'Strawberry___Leaf_scorch', 'Strawberry___healthy',
+        'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___Late_blight',
+        'Tomato___Leaf_Mold', 'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
+        'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
+        'Tomato___healthy'
+    ]
+
+    # Optional CSV verification if present and populated
     split_csv_path = base_dir / "data" / "dataset_splits.csv"
-    if split_csv_path.exists():
-        df = pd.read_csv(split_csv_path)
-        classes = sorted(df["class_name"].unique())
-    else:
-        classes = [
-            'Apple___Apple_scab', 'Apple___Black_rot', 'Apple___Cedar_apple_rust', 'Apple___healthy',
-            'Blueberry___healthy', 'Cherry_(including_sour)___Powdery_mildew', 'Cherry_(including_sour)___healthy',
-            'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot', 'Corn_(maize)___Common_rust_',
-            'Corn_(maize)___Northern_Leaf_Blight', 'Corn_(maize)___healthy', 'Grape___Black_rot',
-            'Grape___Esca_(Black_Measles)', 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)', 'Grape___healthy',
-            'Orange___Haunglongbing_(Citrus_greening)', 'Peach___Bacterial_spot', 'Peach___healthy',
-            'Pepper,_bell___Bacterial_spot', 'Pepper,_bell___healthy', 'Potato___Early_blight',
-            'Potato___Late_blight', 'Potato___healthy', 'Raspberry___healthy', 'Soybean___healthy',
-            'Squash___Powdery_mildew', 'Strawberry___Leaf_scorch', 'Strawberry___healthy',
-            'Tomato___Bacterial_spot', 'Tomato___Early_blight', 'Tomato___Late_blight',
-            'Tomato___Leaf_Mold', 'Tomato___Septoria_leaf_spot', 'Tomato___Spider_mites Two-spotted_spider_mite',
-            'Tomato___Target_Spot', 'Tomato___Tomato_Yellow_Leaf_Curl_Virus', 'Tomato___Tomato_mosaic_virus',
-            'Tomato___healthy'
-        ]
+    if split_csv_path.exists() and split_csv_path.stat().st_size > 0:
+        try:
+            df = pd.read_csv(split_csv_path)
+            if "class_name" in df.columns:
+                classes = sorted(df["class_name"].unique())
+        except Exception:
+            pass
 
     device = torch.device("cpu")
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, len(classes))
 
-    # 2. Check model weights relative to repository structure
+    # 2. Check model weights across potential relative paths
     possible_paths = [
         base_dir / "models" / "resnet18_baseline_cpu.pth",
         base_dir / "resnet18_baseline_cpu.pth",
@@ -56,20 +60,19 @@ def load_model_and_classes():
     weights_path = next((p for p in possible_paths if p.exists()), None)
     loaded_ok = False
 
-    # Optional: Auto-download weights if deploying remotely where weights were gitignored
+    # 3. Cloud Auto-Download: Fallback to GitHub release asset if .pth was gitignored
     if weights_path is None:
         models_dir = base_dir / "models"
         models_dir.mkdir(parents=True, exist_ok=True)
         target_path = models_dir / "resnet18_baseline_cpu.pth"
         
-        url = "https://github.com/Brististic/Plant-Disease-Prediction/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
-        
-        try:
-            with st.spinner("Downloading trained model weights for first-time setup..."):
-                urllib.request.urlretrieve(url, target_path)
-            weights_path = target_path
-        except Exception as e:
-            st.error(f"Failed to auto-download model weights: {e}")
+        # Paste your GitHub Release direct download URL here if hosted online:
+        # url = "https://github.com/<YOUR_USER>/<REPO>/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
+        # try:
+        #     urllib.request.urlretrieve(url, target_path)
+        #     weights_path = target_path
+        # except Exception:
+        #     pass
 
     if weights_path is not None and weights_path.exists():
         model.load_state_dict(torch.load(weights_path, map_location=device))
@@ -79,20 +82,20 @@ def load_model_and_classes():
     return model, classes, device, loaded_ok
 
 
-# Call loader and notify outside the cache function
+# Call function and report status outside cached block
 model, classes, device, is_loaded = load_model_and_classes()
 
 if not is_loaded:
-    st.warning("⚠️ Trained model weights (`resnet18_baseline_cpu.pth`) not found. Model is using untrained weights. Upload your checkpoint to the `models/` folder to run live inferences.")
+    st.warning("⚠️ Trained model weights (`resnet18_baseline_cpu.pth`) not found. Predictions will run on uninitialized weights until the model checkpoint is placed in `models/`.")
 
-# Image transforms
+# Standard evaluation transform
 eval_transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# --- Helper: DIP Disease Severity Calculator ---
+# --- Helper: Classical DIP Severity Estimator ---
 def compute_severity(pil_img):
     img_rgb = np.array(pil_img)
     img_hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
@@ -186,7 +189,7 @@ with col_right:
     if uploaded_file is not None:
         st.subheader("2. Diagnostic Results")
         
-        # Classification
+        # Inference
         input_tensor = eval_transform(image).unsqueeze(0).to(device)
         with torch.no_grad():
             outputs = model(input_tensor)
@@ -218,7 +221,6 @@ if uploaded_file is not None:
         st.image(cam_overlay, caption="Grad-CAM Saliency Map (Highlighting AI Focus Regions)", use_container_width=True)
 
     with tab2:
-        # Colored pseudo-colormap directly rendered via OpenCV
         colored_lesions = cv2.applyColorMap(lesion_mask, cv2.COLORMAP_HOT)
         colored_lesions = cv2.cvtColor(colored_lesions, cv2.COLOR_BGR2RGB)
         st.image(colored_lesions, caption="Otsu-Extracted Necrotic Spots (Heatmap)", use_container_width=True)
