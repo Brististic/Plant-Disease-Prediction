@@ -62,13 +62,14 @@ def load_model_and_classes():
         models_dir.mkdir(parents=True, exist_ok=True)
         target_path = models_dir / "resnet18_baseline_cpu.pth"
         
-        # Example release URL if hosted on GitHub Releases:
-        # url = "https://github.com/<YOUR_USER>/<REPO>/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
-        # try:
-        #     urllib.request.urlretrieve(url, target_path)
-        #     weights_path = target_path
-        # except Exception:
-        #     pass
+        url = "https://github.com/Brististic/Plant-Disease-Prediction/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
+        
+        try:
+            with st.spinner("Downloading trained model weights for first-time setup..."):
+                urllib.request.urlretrieve(url, target_path)
+            weights_path = target_path
+        except Exception as e:
+            st.error(f"Failed to auto-download model weights: {e}")
 
     if weights_path is not None and weights_path.exists():
         model.load_state_dict(torch.load(weights_path, map_location=device))
