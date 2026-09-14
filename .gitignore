@@ -1,0 +1,24 @@
+# Datasets (Prevent pushing gigabytes of raw images)
+PlantVillage-Dataset/
+**/PlantVillage-Dataset/
+data/PlantVillage-Dataset/
+data/raw/
+*.zip
+*.tar.gz
+
+# Keep the CSV split file
+!data/dataset_splits.csv
+
+# Heavy weights
+models/*.pth
+*.pth
+*.pt
+*.onnx
+
+# Python cache & env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
