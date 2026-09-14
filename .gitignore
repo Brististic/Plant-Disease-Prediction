@@ -9,12 +9,6 @@ data/raw/
 # Keep the CSV split file
 !data/dataset_splits.csv
 
-# Heavy weights
-models/*.pth
-*.pth
-*.pt
-*.onnx
-
 # Python cache & env
 __pycache__/
 *.py[cod]
