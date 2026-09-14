@@ -67,7 +67,7 @@ def load_model_and_classes():
         target_path = models_dir / "resnet18_baseline_cpu.pth"
         
         # Paste your GitHub Release direct download URL here if hosted online:
-        # url = "https://github.com/<YOUR_USER>/<REPO>/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
+        url = "https://github.com/Brististic/Plant-Disease-Prediction/releases/download/v1.0.0/resnet18_baseline_cpu.pth"
         # try:
         #     urllib.request.urlretrieve(url, target_path)
         #     weights_path = target_path
