@@ -1,18 +1,28 @@
-# Datasets (Prevent pushing gigabytes of raw images)
-PlantVillage-Dataset/
-**/PlantVillage-Dataset/
-data/PlantVillage-Dataset/
-data/raw/
-*.zip
-*.tar.gz
+# Virtual environments (Do NOT push to Git)
+.venv/
+.venv*/
+venv/
+ENV/
 
-# Keep the CSV split file
-!data/dataset_splits.csv
-
-# Python cache & env
+# Python cache
 __pycache__/
 *.py[cod]
-.venv/
-venv/
-.ipynb_checkpoints/
-*/.ipynb_checkpoints/*
+*$py.class
+
+# Raw datasets (Crucial: Prevents pushing 50k+ images)
+PlantVillage-Dataset*/
+PlantVillage*/
+dataset_rgb/
+raw/
+data/raw/
+*.JPG
+*.jpg
+*.png
+*.jpeg
+
+# Nested project duplicate
+PlantDiseaseProject/
+
+# Keep the model weights and data split CSV
+!models/resnet18_baseline_cpu.pth
+!data/dataset_splits.csv
